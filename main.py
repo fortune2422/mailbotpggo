@@ -644,19 +644,6 @@ def resume_send():
     PAUSED = False
     return jsonify({"message":"发送已继续"})
 
-@app.route("/send-stream")
-def send_stream():
-    def event_stream():
-        q = Queue()
-        EVENT_SUBSCRIBERS.append(q)
-        try:
-            while True:
-                data = q.get()
-                yield f"data: {data}\\n\\n"
-        except GeneratorExit:
-            if q in EVENT_SUBSCRIBERS:
-                EVENT_SUBSCRIBERS.remove(q)
-    return Response(event_stream(), mimetype="text/event-stream")
 
 # ======= 历史日志 / 用量：用于刷新后回放 =======
 @app.route("/get-logs")
