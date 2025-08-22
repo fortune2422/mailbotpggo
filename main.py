@@ -322,9 +322,11 @@ def home():
             <option value="100">100</option>
         </select>
         当前页：
-        <input type="number" id="currentPage" value="1" style="width:50px;" onchange="loadRecipients()">
-        <span id="pagination"></span>
-    </div>
+        <button onclick="changePage(-1)">上一页</button>
+    <input type="number" id="currentPage" value="1" style="width:50px;" onchange="loadRecipients()">
+    <button onclick="changePage(1)">下一页</button>
+    <span id="pagination"></span>
+</div>
 
     <table id="recipientsTable">
         <thead><tr><th>Email</th><th>Name</th><th>Real Name</th><th>操作</th></tr></thead>
@@ -423,28 +425,38 @@ def home():
         const tbody = document.querySelector('#recipientsTable tbody');
         tbody.innerHTML = '';
 
-        // 每页显示数量选择
         const perPage = parseInt(document.getElementById('perPage')?.value || 10);
-        const page = parseInt(document.getElementById('currentPage')?.value || 1);
-        const startIdx = (page-1)*perPage;
-        const endIdx = startIdx+perPage;
+        let page = parseInt(document.getElementById('currentPage')?.value || 1);
 
+        const totalPages = Math.ceil(data.pending.length / perPage);
+        if(page > totalPages) page = totalPages;
+        if(page < 1) page = 1;
+        document.getElementById('currentPage').value = page;
+
+        const startIdx = (page-1) * perPage;
+        const endIdx = startIdx + perPage;
         const pageData = data.pending.slice(startIdx, endIdx);
+
         pageData.forEach((r)=>{
             const tr = document.createElement('tr');
             tr.innerHTML = `<td>${r.email}</td><td>${r.name||''}</td><td>${r.real_name||''}</td>`+
-            `<td><button class="danger-link" onclick="deleteRecipient('${r.email}')">删除</button></td>`;
+                           `<td><button class="danger-link" onclick="deleteRecipient('${r.email}')">删除</button></td>`;
             tbody.appendChild(tr);
         });
 
-        // 分页控件显示
-        const totalPages = Math.ceil(data.pending.length/perPage);
-        if(document.getElementById('pagination')){
-            document.getElementById('pagination').innerHTML = `页数: ${page}/${totalPages}`;
-        }
+        document.getElementById('pagination').textContent = `页数: ${page}/${totalPages}`;
     });
 }
 
+// 上一页 / 下一页按钮函数
+function changePage(offset){
+    const pageInput = document.getElementById('currentPage');
+    let page = parseInt(pageInput.value || 1);
+    page += offset;
+    if(page < 1) page = 1;
+    pageInput.value = page;
+    loadRecipients();
+}
 
             function deleteRecipient(email){
                 fetch('/delete-recipient', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email})})
