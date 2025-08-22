@@ -153,19 +153,30 @@ def load_recipients():
         RECIPIENTS=[]
         SENT_RECIPIENTS=[]
 
-# ================== 实时日志 ==================
+# ================== 后端：24小时内账号统计 ==================
 def append_log(msg):
-    # 清理24小时以上日志
     now_utc = datetime.datetime.utcnow()
     cutoff = now_utc - datetime.timedelta(hours=24)
     global SEND_LOGS
-    SEND_LOGS = [entry for entry in SEND_LOGS if datetime.datetime.fromisoformat(entry['ts'].replace('+08:00',''))>cutoff]
+    # 清理24小时以上日志
+    SEND_LOGS = [entry for entry in SEND_LOGS if datetime.datetime.fromisoformat(entry['ts'].replace('+08:00','')) > cutoff]
 
-    entry = {"ts":(now_utc+datetime.timedelta(hours=8)).isoformat()+'+08:00',"msg":msg}
+    entry = {"ts":(now_utc+datetime.timedelta(hours=8)).isoformat()+"+08:00", "msg":msg}
     SEND_LOGS.append(entry)
     save_logs()
     save_usage()
-    send_event({"log":msg,"usage":account_usage.copy()})
+
+    # 统计24小时内账号发送次数
+    recent_usage = {}
+    for log in SEND_LOGS:
+        text = log['msg']
+        if text.startswith('已发送给'):
+            parts = text.split('使用账号')
+            if len(parts) == 2:
+                acc_email = parts[1].strip(' )')
+                recent_usage[acc_email] = recent_usage.get(acc_email, 0) + 1
+
+    send_event({"log": msg, "usage": recent_usage})
 
 # ================== SSE ==================
 def send_event(data):
@@ -300,12 +311,27 @@ def home():
                     </div>
                 </div>
                 <div class="card" style="margin-top:10px;">
-                    <h3>收件箱列表</h3>
-                    <table id="recipientsTable">
-                        <thead><tr><th>Email</th><th>Name</th><th>Real Name</th><th>操作</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
+    <h3>收件箱列表</h3>
+
+    <!-- 分页控件 -->
+    <div style="margin-bottom:6px;">
+        每页显示：
+        <select id="perPage" onchange="loadRecipients()">
+            <option value="10">10</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+        </select>
+        当前页：
+        <input type="number" id="currentPage" value="1" style="width:50px;" onchange="loadRecipients()">
+        <span id="pagination"></span>
+    </div>
+
+    <table id="recipientsTable">
+        <thead><tr><th>Email</th><th>Name</th><th>Real Name</th><th>操作</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
+
             </div>
 
             <!-- 邮件发送 -->
@@ -392,18 +418,33 @@ def home():
                 });
             }
 
-            function loadRecipients(){
-                fetch('/recipients').then(res=>res.json()).then(data=>{
-                    const tbody = document.querySelector('#recipientsTable tbody');
-                    tbody.innerHTML = '';
-                    data.pending.forEach((r)=>{
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `<td>${r.email}</td><td>${r.name||''}</td><td>${r.real_name||''}</td>
-                        <td><button class="danger-link" onclick="deleteRecipient('${r.email}')">删除</button></td>`;
-                        tbody.appendChild(tr);
-                    });
-                });
-            }
+           function loadRecipients(){
+    fetch('/recipients').then(res=>res.json()).then(data=>{
+        const tbody = document.querySelector('#recipientsTable tbody');
+        tbody.innerHTML = '';
+
+        // 每页显示数量选择
+        const perPage = parseInt(document.getElementById('perPage')?.value || 10);
+        const page = parseInt(document.getElementById('currentPage')?.value || 1);
+        const startIdx = (page-1)*perPage;
+        const endIdx = startIdx+perPage;
+
+        const pageData = data.pending.slice(startIdx, endIdx);
+        pageData.forEach((r)=>{
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${r.email}</td><td>${r.name||''}</td><td>${r.real_name||''}</td>`+
+            `<td><button class="danger-link" onclick="deleteRecipient('${r.email}')">删除</button></td>`;
+            tbody.appendChild(tr);
+        });
+
+        // 分页控件显示
+        const totalPages = Math.ceil(data.pending.length/perPage);
+        if(document.getElementById('pagination')){
+            document.getElementById('pagination').innerHTML = `页数: ${page}/${totalPages}`;
+        }
+    });
+}
+
 
             function deleteRecipient(email){
                 fetch('/delete-recipient', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email})})
