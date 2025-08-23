@@ -10,6 +10,8 @@ from email.header import Header
 from io import StringIO, BytesIO
 from threading import Thread, Lock
 from queue import Queue
+import atexit
+
 
 app = Flask(__name__)
 
@@ -83,11 +85,17 @@ def load_logs():
             SEND_LOGS = []
     else:
         SEND_LOGS = []
-load_logs()
 
 def save_logs():
     with open(LOG_FILE_JSON,'w',encoding='utf-8') as f:
         json.dump(SEND_LOGS,f,ensure_ascii=False,indent=2)
+        
+def cleanup():
+    save_recipients()
+    save_logs()
+    save_usage()
+
+atexit.register(cleanup)
 
 # ================== 辅助 ==================
 def reset_daily_usage_if_needed():
@@ -152,6 +160,11 @@ def load_recipients():
     else:
         RECIPIENTS=[]
         SENT_RECIPIENTS=[]
+        
+# ---- 保证启动时总是加载历史数据 ----
+load_recipients()
+load_logs()
+
 
 # ================== 后端：24小时内账号统计 ==================
 def append_log(msg):
@@ -159,7 +172,16 @@ def append_log(msg):
     cutoff = now_utc - datetime.timedelta(hours=24)
     global SEND_LOGS
     # 清理24小时以上日志
-    SEND_LOGS = [entry for entry in SEND_LOGS if datetime.datetime.fromisoformat(entry['ts'].replace('+08:00','')) > cutoff]
+    valid_logs = []
+    for entry in SEND_LOGS:
+        try:
+            ts = datetime.datetime.fromisoformat(entry['ts'])
+        except Exception:
+            continue
+        if ts > cutoff:
+            valid_logs.append(entry)
+    SEND_LOGS = valid_logs
+
 
     entry = {"ts":(now_utc+datetime.timedelta(hours=8)).isoformat()+"+08:00", "msg":msg}
     SEND_LOGS.append(entry)
@@ -197,14 +219,7 @@ def send_stream():
             if q in EVENT_SUBSCRIBERS: EVENT_SUBSCRIBERS.remove(q)
     return Response(event_stream(),mimetype='text/event-stream')
 
-# ================== 发送线程 ==================
-def send_worker_loop():
-    global IS_SENDING,PAUSED
-    while SEND_QUEUE:
-        reset_daily_usage_if_needed()
-        task = SEND_QUEUE[0]
-        subject,body,interval = task['subject'],task['body'],task['interval']
-        if PAUSED: time.sleep(1); continue
+    continue
 
         recipient=None
         with SEND_LOCK:
@@ -307,7 +322,6 @@ def home():
                         <button class="btn" onclick="downloadTemplate()">下载 CSV 模板</button>
                         <button class="btn" onclick="exportPending()">导出未发送收件人</button>
                         <button class="btn" onclick="exportSent()">导出已发送收件人</button>
-                        <button class="btn" onclick="continueTask()">继续上次任务</button>
                     </div>
                 </div>
                 <div class="card" style="margin-top:10px;">
@@ -470,7 +484,6 @@ function changePage(offset){
             function downloadTemplate(){ window.location.href="/download-template"; }
             function exportPending(){ window.location.href="/download-recipients?status=pending"; }
             function exportSent(){ window.location.href="/download-recipients?status=sent"; }
-            function continueTask(){ window.location.href="/continue-task"; }
 
             // ---------------- 邮件发送 ----------------
             function loadAccounts(){
@@ -708,18 +721,6 @@ def get_usage():
     return jsonify({"usage": account_usage})
 
 # ================== 收件人管理 ==================
-@app.route("/continue-task")
-def continue_task():
-    global SEND_QUEUE, IS_SENDING, PAUSED
-    if RECIPIENTS:
-        SEND_QUEUE.append({"subject":"继续上次任务","body":"继续上次任务邮件","interval":5})
-        if not IS_SENDING:
-            IS_SENDING = True
-            PAUSED = False
-            t = Thread(target=send_worker_loop, daemon=True)
-            t.start()
-    return jsonify({"message":"已加载上次未完成任务，可开始发送"})
-
 @app.route("/recipients", methods=["GET"])
 def get_recipients():
     return jsonify({"pending": RECIPIENTS, "sent": SENT_RECIPIENTS})
@@ -864,7 +865,6 @@ def delete_account():
 
 # ================== 启动 ==================
 if __name__ == "__main__":
-    load_recipients()
     # 再次校验 usage 中包含所有 ENV 账号
     for acc in ACCOUNTS:
         account_usage.setdefault(acc["email"], 0)
