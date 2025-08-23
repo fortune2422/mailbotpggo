@@ -168,20 +168,20 @@ load_logs()
 
 # ================== 后端：24小时内账号统计 ==================
 def append_log(msg):
+    global SEND_LOGS
     now_utc = datetime.datetime.utcnow()
     cutoff = now_utc - datetime.timedelta(hours=24)
-    global SEND_LOGS
+    
     # 清理24小时以上日志
     valid_logs = []
     for entry in SEND_LOGS:
         try:
             ts = datetime.datetime.fromisoformat(entry['ts'])
+            if ts > cutoff:
+                valid_logs.append(entry)
         except Exception:
             continue
-        if ts > cutoff:
-            valid_logs.append(entry)
     SEND_LOGS = valid_logs
-
 
     entry = {"ts":(now_utc+datetime.timedelta(hours=8)).isoformat()+"+08:00", "msg":msg}
     SEND_LOGS.append(entry)
