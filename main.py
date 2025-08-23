@@ -219,9 +219,6 @@ def send_stream():
             if q in EVENT_SUBSCRIBERS: EVENT_SUBSCRIBERS.remove(q)
     return Response(event_stream(),mimetype='text/event-stream')
 
-    continue
-
-        recipient=None
         with SEND_LOCK:
             if RECIPIENTS: recipient=RECIPIENTS.pop(0)
         if not recipient: break
