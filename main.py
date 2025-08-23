@@ -219,28 +219,6 @@ def send_stream():
             if q in EVENT_SUBSCRIBERS: EVENT_SUBSCRIBERS.remove(q)
     return Response(event_stream(),mimetype='text/event-stream')
 
-        recipient_safe={'name':recipient.get('name',''),'real_name':recipient.get('real_name','')}
-        try:
-            personalized_subject = subject.format(**recipient_safe)
-            personalized_body = body.format(**recipient_safe)
-        except Exception as e:
-            append_log(f"内容格式错误 {recipient['email']}: {e}")
-            with SEND_LOCK: RECIPIENTS.append(recipient)
-            continue
-
-        success,err = send_email(acc,recipient['email'],personalized_subject,personalized_body)
-        if success:
-            SENT_RECIPIENTS.append(recipient)
-            save_recipients()
-            append_log(f"已发送给 {recipient['email']} (使用账号 {acc['email']})")
-        else:
-            append_log(f"发送失败 {recipient['email']} : {err}")
-            with SEND_LOCK: RECIPIENTS.append(recipient)
-        time.sleep(interval)
-    IS_SENDING=False
-    with SEND_LOCK:
-        if SEND_QUEUE: SEND_QUEUE.pop(0)
-
 # ================== 前端页面（完整 HTML 内嵌） ==================
 @app.route("/", methods=["GET"])
 def home():
