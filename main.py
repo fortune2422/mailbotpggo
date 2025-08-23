@@ -4,6 +4,7 @@ import smtplib
 import time
 import datetime
 import json
+import requests
 from flask import Flask, request, jsonify, render_template_string, send_file, Response
 from email.mime.text import MIMEText
 from email.header import Header
@@ -827,11 +828,30 @@ def delete_account():
     append_log(f"已删除账号 {email}")
     return jsonify({"message": f"{email} 已删除"})
 
+# ================== Keep Alive ==================
+@app.route("/ping")
+def ping():
+    return jsonify({"status": "ok", "ts": datetime.datetime.utcnow().isoformat()})
+
+def keep_alive():
+    def run():
+        while True:
+            try:
+                url = f"http://localhost:{port}/ping"   # 自己 ping 自己
+                requests.get(url, timeout=10)
+            except Exception as e:
+                print("Keep-alive failed:", e)
+            time.sleep(300)  # 5分钟
+    t = Thread(target=run, daemon=True)
+    t.start()
+
 # ================== 启动 ==================
 if __name__ == "__main__":
-    # 再次校验 usage 中包含所有 ENV 账号
     for acc in ACCOUNTS:
         account_usage.setdefault(acc["email"], 0)
     save_usage()
     port = int(os.environ.get("PORT", 10000))
+
+    keep_alive()   # <-- 在这里启动自 ping 线程
+
     app.run(host="0.0.0.0", port=port, threaded=True)
