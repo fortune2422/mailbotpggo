@@ -841,7 +841,7 @@ def keep_alive():
                 requests.get(url, timeout=10)
             except Exception as e:
                 print("Keep-alive failed:", e)
-            time.sleep(300)  # 5分钟
+            time.sleep(1)  # 5分钟
     t = Thread(target=run, daemon=True)
     t.start()
 
