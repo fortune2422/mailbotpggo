@@ -219,17 +219,6 @@ def send_stream():
             if q in EVENT_SUBSCRIBERS: EVENT_SUBSCRIBERS.remove(q)
     return Response(event_stream(),mimetype='text/event-stream')
 
-        with SEND_LOCK:
-            if RECIPIENTS: recipient=RECIPIENTS.pop(0)
-        if not recipient: break
-
-        acc = get_next_account()
-        if not acc:
-            append_log("没有可用账号或账号今日已达上限，等待60秒重试。")
-            time.sleep(60)
-            with SEND_LOCK: RECIPIENTS.insert(0,recipient)
-            continue
-
         recipient_safe={'name':recipient.get('name',''),'real_name':recipient.get('real_name','')}
         try:
             personalized_subject = subject.format(**recipient_safe)
